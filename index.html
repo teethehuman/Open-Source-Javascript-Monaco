@@ -1,0 +1,193 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lua Editor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            font-family: 'Fira Code', monospace;
+            background-color: #1e1e2e; /* Dark purple background */
+        }
+
+        #editor-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            border: 1px solid #444; /* Slight border for better visibility */
+        }
+
+        #editor {
+            flex-grow: 1;
+            background-color: #232136; /* Purple-ish background for editor */
+        }
+
+        /* Right-click context menu */
+        #context-menu {
+            position: absolute;
+            background-color: #3e2c4f;
+            color: #E0AFE3; /* Lighter purple text */
+            display: none;
+            padding: 6px; /* Reduced padding */
+            border-radius: 5px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            z-index: 10;
+            font-size: 10px; /* Smaller font size for context menu */
+        }
+
+        #context-menu input {
+            border: none;
+            background-color: #2b1a30;
+            color: white;
+            padding: 2px; /* Reduced padding */
+            font-family: 'Fira Code', monospace;
+            font-size: 10px; /* Smaller font size for input */
+            border-radius: 3px;
+            outline: none;
+        }
+
+        #context-menu input:focus {
+            border: 1px solid #9a6ae1; /* Soft purple border on focus */
+        }
+
+        .context-menu-item {
+            cursor: pointer;
+            padding: 2px 0; /* Reduced padding for menu items */
+        }
+
+        .context-menu-item:hover {
+            background-color: #4d3b5c;
+        }
+
+        /* Editable tab input */
+        .edit-tab-name {
+            background: transparent;
+            border: none;
+            font-family: 'Fira Code', monospace;
+            font-weight: 500;
+            color: white;
+            width: 100px;
+            outline: none;
+            font-size: 10px; /* Smaller font size for tab input */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="editor-container">
+        <div id="editor"></div>
+    </div>
+
+    <!-- Context Menu for renaming/deleting tabs -->
+    <div id="context-menu">
+        <div class="context-menu-item" id="rename-tab">Rename Tab</div>
+        <div class="context-menu-item" id="delete-tab">Delete Tab</div>
+        <input type="text" id="rename-input" placeholder="Rename Tab" style="display: none;">
+    </div>
+
+    <!-- Monaco Editor CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.34.0/min/vs/loader.js"></script>
+    <script>
+        let editor;
+        let contextMenu = document.getElementById('context-menu');
+        let renameInput = document.getElementById('rename-input');
+        let targetTabId;
+
+        const savedScripts = JSON.parse(localStorage.getItem('luaScripts')) || {
+            default: '-- Aexus Example\nfunction greet(name)\n    print("Hello, " .. name .. "!")\nend\n\ngreet("World")'
+        };
+
+        const savedTabNames = JSON.parse(localStorage.getItem('tabNames')) || {
+            default: 'Default Script'
+        };
+
+        require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.34.0/min/vs' } });
+        require(['vs/editor/editor.main'], function() {
+            monaco.editor.defineTheme('custom-purple-theme', {
+                base: 'vs-dark',
+                inherit: true,
+                rules: [
+                    { background: '232136' },
+                    { token: 'comment', foreground: '9A6AE1', fontStyle: 'italic' }, /* Lighter purple for comments */
+                    { token: 'keyword', foreground: 'C4A7E7' }, /* Softer purple for keywords */
+                    { token: 'string', foreground: 'F6C177' }, /* Warm amber for strings */
+                    { token: 'number', foreground: 'E0AF68' }, /* Orange-ish tone for numbers */
+                ],
+                colors: {
+                    'editor.background': '#232136', /* Purple background */
+                    'editor.foreground': '#D9E0EE', /* Soft light purple text */
+                    'editor.lineHighlightBackground': '#3e2c4f', /* Highlight lines with purple */
+                    'editorCursor.foreground': '#9A6AE1', /* Purple cursor */
+                    'editorIndentGuide.background': '#4d3b5c', /* Subtle purple indent guide */
+                }
+            });
+
+            editor = monaco.editor.create(document.getElementById('editor'), {
+                value: savedScripts.default,
+                language: 'lua',
+                theme: 'custom-purple-theme',
+                smoothScrolling: true,
+                scrollBeyondLastLine: false,
+                cursorSmoothCaretAnimation: true,
+                cursorBlinking: 'smooth',
+                minimap: { enabled: false },
+                lineHeight: 18, // Adjust line height if needed
+                fontSize: 12, // Smaller font size for the editor
+                wordWrap: 'on',
+                fontFamily: 'Fira Code'
+            });
+
+            document.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                openContextMenu(e);
+            });
+
+            document.addEventListener('click', () => {
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('rename-tab').addEventListener('click', function() {
+                renameInput.style.display = 'block';
+                renameInput.focus();
+                renameInput.value = savedTabNames[targetTabId] || 'Script';
+                renameInput.addEventListener('keydown', function(event) {
+                    if (event.key === 'Enter') {
+                        const newName = renameInput.value;
+                        savedTabNames[targetTabId] = newName;
+                        localStorage.setItem('tabNames', JSON.stringify(savedTabNames));
+                        contextMenu.style.display = 'none';
+                    }
+                });
+            });
+
+            document.getElementById('delete-tab').addEventListener('click', function() {
+                delete savedScripts[targetTabId];
+                delete savedTabNames[targetTabId];
+                localStorage.setItem('luaScripts', JSON.stringify(savedScripts));
+                localStorage.setItem('tabNames', JSON.stringify(savedTabNames));
+                contextMenu.style.display = 'none';
+            });
+        });
+
+        function openContextMenu(event) {
+            contextMenu.style.display = 'block';
+            contextMenu.style.top = `${event.clientY}px`;
+            contextMenu.style.left = `${event.clientX}px`;
+            targetTabId = 'default'; // Default tab for context menu actions
+            renameInput.style.display = 'none'; 
+        }
+
+        window.addEventListener('beforeunload', () => {
+            const content = editor.getValue();
+            savedScripts.default = content;
+            localStorage.setItem('luaScripts', JSON.stringify(savedScripts));
+        });
+    </script>
+</body>
+</html>
